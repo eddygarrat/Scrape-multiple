@@ -1,0 +1,83 @@
+import requests
+import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
+from IPython.display import clear_output
+from queue import Queue
+
+def fetch_and_store_data(queue, api_key, file_name):
+    #put 0 when starting
+    while not queue.empty():
+        start_index, end_index= queue.get()
+        kk = 0
+        for i in range(start_index, end_index):
+            print(i)
+            co = new['collection_id'][i]
+            to = new['token_id'][i]
+            url = f"https://api.reservoir.tools/collections/{co}/attributes/explore/v5?tokenId={to}"
+            headers = {
+                'accept': 'application/json',
+                'x-api-key': api_key
+            }
+
+            try:
+                response = requests.get(url, headers=headers, timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    print(data)
+                    df = pd.json_normalize(data, 'attributes')
+                    df['collection'] = co
+                    df['token'] = to
+                else:
+                    df = pd.DataFrame({'trait': ['NA'], 'collection': [co], 'token': [to]})
+
+                clear_output(wait=True)
+                if kk == 0:
+                    df.to_csv(file_name, index=False)
+                    kk = 1
+                else:
+                    df.to_csv(file_name, mode='a', index=False, header=False)
+            except requests.exceptions.HTTPError as errh: 
+                pass
+        queue.task_done()
+
+api_keys = [
+    '351b2a67-68b4-5a83-800a-52c58c95aa17',
+    '7c8decc8-4c2d-5f7c-ac3d-c56b66b762ab',
+    #'API_KEY_3',
+    #'API_KEY_4'
+]
+
+file_names = [
+    r'D:\jishnu\OneDrive - Indian School of Business\royalty\data\remaintrait00011_part1.csv',
+    r'D:\jishnu\OneDrive - Indian School of Business\royalty\data\remaintrait00011_part2.csv',
+    #r'D:\jishnu\OneDrive - Indian School of Business\royalty\data\remaintrait00011_part3.csv',
+    #r'D:\jishnu\OneDrive - Indian School of Business\royalty\data\remaintrait00011_part4.csv'
+]
+queue = Queue()
+
+# Add ranges to the queue
+step = 1000  # Define the step size for each range
+a=505781
+b=508781
+for start in range(a, b, step):
+    end = min(start + step, b)
+    queue.put((start, end))
+# Indices for each chunk
+#ranges = [
+#    (505781, 605781),
+#    (605781, 705781),
+    #(705781, 800000),
+    #(1450080, 1550080)
+#]
+
+# Run concurrently
+
+with ThreadPoolExecutor(max_workers=2) as executor:
+    futures = [
+        executor.submit(fetch_and_store_data, queue, api_key, file_name)
+        for api_key, file_name in zip(api_keys, file_names)
+    ]
+    for future in futures:
+        future.result()  
+
+queue.join()
